@@ -4,4 +4,4 @@ pandas
 PyYAML
 python-docx
 schedule
-smtplib
+
