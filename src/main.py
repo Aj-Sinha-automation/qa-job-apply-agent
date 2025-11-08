@@ -1,28 +1,51 @@
-import yaml, os, schedule, time
-from job_finder import fetch_jobs
-from resume_optimizer import tailor_resume
-from email_sender import send_email
+"""
+src/main.py
+Main orchestrator for the QA Job Apply Agent.
+"""
+import os
+import traceback
+from scripts.convert_pdf_to_docx import convert as convert_pdf_to_docx
+from src.job_search import search_jobs
+from src.resume_tailor import tailor_and_save
+from src.telegram_bot import send_message
 
 def main():
-    with open("config/settings.yaml") as f:
-        config = yaml.safe_load(f)
+    try:
+        send_message("🚀 Starting QA Job Apply Agent...")
+        # Step 1: Ensure resume converted
+        if not os.path.exists("data/base_resume.docx") and os.path.exists("data/Resume-ANURAJ.pdf"):
+            send_message("📄 Converting PDF → DOCX resume...")
+            convert_pdf_to_docx()
+        else:
+            send_message("✅ Base resume ready.")
 
-    jobs = fetch_jobs(config)
-    print(f"Fetched {len(jobs)} jobs")
+        # Step 2: Job Search
+        send_message("🔍 Searching jobs (Bangalore / Remote)...")
+        jobs = search_jobs(query="QA Automation Engineer", location_keywords=["Bangalore", "Bengaluru", "Remote"], max_results=10)
+        if not jobs:
+            send_message("❌ No jobs found this run.")
+            return
+        send_message(f"✅ Found {len(jobs)} jobs. Tailoring top 3...")
 
-    for job in jobs[:5]:
-        desc = job.get("description") or job.get("title", "")
-        output_path = f"data/tailored_resume_{job.get('id', 'temp')}.docx"
-        tailor_resume(config['resume']['template_path'], desc, output_path)
+        # Step 3: Tailor resumes for top jobs
+        for i, job in enumerate(jobs[:3]):
+            title = job.get("title", "QA Engineer")
+            snippet = job.get("snippet", "")
+            company_name = title.split(" ")[0] if title else "Company"
+            send_message(f"✂️ Tailoring resume for *{title}*...")
+            docx_path, pdf_path = tailor_and_save(title, company_name, snippet)
+            send_message(f"📄 Tailored resume ready:\n{docx_path}\n{pdf_path or 'PDF conversion failed.'}\n🔗 {job.get('url')}")
 
-        if "email" in job:
-            send_email(job["email"], "Application for QA Engineer Role", "Please find my tailored resume attached.", output_path)
+        send_message("✅ All done! Check output/resumes for files.")
 
-def run_schedule():
-    schedule.every(6).hours.do(main)
-    while True:
-        schedule.run_pending()
-        time.sleep(60)
+    except Exception as e:
+        tb = traceback.format_exc()
+        msg = f"❌ Agent crashed with error:\n{e}\n\nTraceback:\n{tb[:3000]}"
+        print(msg)
+        try:
+            send_message(msg)
+        except:
+            pass
 
 if __name__ == "__main__":
-    run_schedule()
+    main()
