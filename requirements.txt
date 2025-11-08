@@ -1,7 +1,6 @@
-requests
 openai
-pandas
-PyYAML
+requests
+python-dotenv
+pdf2docx
 python-docx
-schedule
-
+pypandoc
