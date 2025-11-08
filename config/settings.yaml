@@ -1,0 +1,18 @@
+job_search:
+  sources:
+    - "https://remotive.com/api/remote-jobs?category=software-dev"
+    - "https://www.arbeitnow.com/api/job-board-api"
+  keywords:
+    - "QA Engineer"
+    - "Automation Tester"
+    - "SDET"
+  experience_years: 3
+
+resume:
+  template_path: "data/resume_template.docx"
+  output_folder: "data/"
+
+email:
+  smtp_server: "smtp.gmail.com"
+  smtp_port: 587
+  sender_email: "youremail@gmail.com"

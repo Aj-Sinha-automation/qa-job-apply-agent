@@ -1,0 +1,7 @@
+requests
+openai
+pandas
+PyYAML
+python-docx
+schedule
+smtplib
