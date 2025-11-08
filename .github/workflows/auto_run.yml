@@ -1,37 +1,44 @@
-name: Auto Run QA Job Agent
+name: Auto QA Job Apply Bot
 
 on:
   schedule:
-    - cron: "0 */6 * * *"  # Run every 6 hours
-  workflow_dispatch:        # Allows manual "Run workflow" trigger from GitHub UI
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
 
 jobs:
-  run-agent:
+  run-bot:
     runs-on: ubuntu-latest
 
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+      GOOGLE_CXID: ${{ secrets.GOOGLE_CXID }}
+
     steps:
-      - name: 🛠️ Checkout repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: 🐍 Set up Python
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: 📦 Install dependencies
+      - name: Install system deps (libreoffice)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libreoffice-writer libreoffice-common libreoffice-core
+
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: 🚀 Run Telegram Bot Integration
+      - name: Convert PDF -> DOCX (if present)
+        run: |
+          python scripts/convert_pdf_to_docx.py || echo "No conversion needed or failed"
+
+      - name: Run bot (search & respond to commands)
         run: |
           python src/telegram_bot.py
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
-          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-          GOOGLE_CX_ID: ${{ secrets.GOOGLE_CX_ID }}
-   
