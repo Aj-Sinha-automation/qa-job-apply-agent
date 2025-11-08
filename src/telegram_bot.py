@@ -1,5 +1,5 @@
 import os, json, requests
-from job_search import search_jobs
+from job_finder import search_jobs
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
