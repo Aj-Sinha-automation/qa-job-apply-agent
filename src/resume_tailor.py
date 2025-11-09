@@ -6,14 +6,17 @@ Output:
   - output/resumes/Anuraj_<CompanyName>.pdf  (via libreoffice conversion)
   - output/descriptions/<CompanyName>_description.txt
 """
+
 import os
 import json
 import re
 import subprocess
 from datetime import datetime
 from docx import Document
-import openai
-openai.api_key = os.getenv("OPENAI_API_KEY")
+from openai import OpenAI  # ✅ new OpenAI client import
+
+# --- Load OpenAI key from environment
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 BASE_DOCX = "data/base_resume.docx"
 OUT_DIR_RESUMES = "output/resumes"
@@ -52,9 +55,7 @@ Return strictly valid JSON.
 
 INPUT:
 Base Resume Text:
-\"\"\"
-{base_text}
-\"\"\"
+\"\"\"{base_text}\"\"\"
 
 Job Title: {job_title}
 
@@ -64,53 +65,45 @@ Job Description Snippet:
 
 def request_tailored_sections(base_text: str, job_title: str, job_desc: str) -> dict:
     prompt = PROMPT_TEMPLATE.format(base_text=base_text, job_title=job_title, job_desc=job_desc)
-    resp = openai.ChatCompletion.create(
+    # ✅ Updated to new API interface
+    resp = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"role":"user","content":prompt}],
+        messages=[{"role": "user", "content": prompt}],
         temperature=0.1,
         max_tokens=700
     )
-    content = resp['choices'][0]['message']['content']
-    # Model should return JSON — attempt to parse it
+    content = resp.choices[0].message.content
+
+    # Try parsing JSON safely
     try:
-        parsed = json.loads(content)
-        return parsed
-    except Exception as e:
-        # attempt to extract JSON substring
+        return json.loads(content)
+    except Exception:
         m = re.search(r"(\{.*\})", content, flags=re.S)
         if m:
             try:
                 return json.loads(m.group(1))
             except:
-                raise RuntimeError("LLM returned non-JSON and JSON parsing failed. Response:\n" + content)
-        raise RuntimeError("LLM returned non-JSON. Response:\n" + content)
+                raise RuntimeError(f"❌ JSON parse failed. Response:\n{content}")
+        raise RuntimeError(f"❌ Non-JSON response:\n{content}")
 
 # Step C: Replace targeted sections in DOCX
 def apply_updates_to_docx(out_docx_path: str, updates: dict):
     doc = Document(BASE_DOCX)
-    # Strategy:
-    # - Find paragraph indexes of headings: Profile Summary, Core Competencies, IT Skills, Work Experience, Projects
-    # - Replace the paragraph(s) following headings with the content from updates (best-effort)
-    # This is heuristic-based.
     headings = {
         "summary": ["profile summary", "profile", "summary"],
         "skills": ["core competencies", "it skills", "skills", "core skills"],
         "experience": ["work experience", "experience", "projects"]
     }
-    # lowercase mapping of paragraph text -> index
+
     para_texts = [p.text.strip() if p.text else "" for p in doc.paragraphs]
     lower_texts = [t.lower() for t in para_texts]
 
     def replace_section_by_heading(heading_list, new_lines):
         for h in heading_list:
             if h in "".join(lower_texts):
-                # find paragraph index where this heading occurs
                 for idx, t in enumerate(lower_texts):
                     if h in t:
-                        # We'll replace next N paragraphs (or the next bullet block)
-                        # Simple approach: replace the immediate next 6 paragraphs with provided lines
                         start = idx + 1
-                        # delete a few subsequent paragraphs content (replace text only)
                         for i, line in enumerate(new_lines):
                             if start + i < len(doc.paragraphs):
                                 doc.paragraphs[start + i].text = line
@@ -122,59 +115,55 @@ def apply_updates_to_docx(out_docx_path: str, updates: dict):
     # Apply summary
     summary = updates.get("summary")
     if summary:
-        # split into lines
         lines = [l.strip() for l in summary.split("\n") if l.strip()]
         replaced = replace_section_by_heading(headings["summary"], lines)
-        if not replaced:
-            # fallback: replace first paragraph
+        if not replaced and len(doc.paragraphs) > 0:
             doc.paragraphs[0].text = " ".join(lines)
 
     # Apply skills
     skills = updates.get("skills", [])
     if skills:
-        skills_lines = [", ".join(skills)]  # single line or bullet
-        replace_section_by_heading(headings["skills"], skills_lines)
+        replace_section_by_heading(headings["skills"], [", ".join(skills)])
 
-    # Apply experience updates as bullets appended to top experience block
+    # Apply experience updates
     exp_updates = updates.get("experience_updates", [])
     if exp_updates:
         appended = False
         for h in headings["experience"]:
             for idx, t in enumerate(lower_texts):
                 if h in t:
-                    # find insertion point: after heading, add bullets as new paragraphs
                     insert_at = idx + 1
                     for b in exp_updates:
-                        doc.paragraphs[insert_at].text = "-" + " " + b if insert_at < len(doc.paragraphs) else doc.add_paragraph("- " + b)
+                        if insert_at < len(doc.paragraphs):
+                            doc.paragraphs[insert_at].text = f"- {b}"
+                        else:
+                            doc.add_paragraph(f"- {b}")
                         insert_at += 1
                     appended = True
                     break
             if appended:
                 break
         if not appended:
-            # fallback: append at the end
             doc.add_paragraph("Experience updates:")
             for b in exp_updates:
-                doc.add_paragraph("- " + b)
+                doc.add_paragraph(f"- {b}")
 
-    # Save the docx
     os.makedirs(os.path.dirname(out_docx_path), exist_ok=True)
     doc.save(out_docx_path)
-    print(f"Saved tailored docx: {out_docx_path}")
+    print(f"✅ Saved tailored DOCX: {out_docx_path}")
 
-# Step D: convert DOCX -> PDF using libreoffice (needs to be installed)
+# Step D: Convert DOCX → PDF via LibreOffice
 def convert_docx_to_pdf(docx_path):
     if not os.path.exists(docx_path):
         raise FileNotFoundError(docx_path)
     pdf_path = docx_path.rsplit(".", 1)[0] + ".pdf"
-    # Use libreoffice headless conversion
     cmd = ["libreoffice", "--headless", "--convert-to", "pdf", "--outdir", os.path.dirname(docx_path), docx_path]
     subprocess.check_call(cmd)
     if os.path.exists(pdf_path):
-        print(f"Saved PDF: {pdf_path}")
+        print(f"✅ Saved PDF: {pdf_path}")
     return pdf_path
 
-# High-level function
+# High-level orchestrator
 def tailor_and_save(job_title: str, company_name: str, job_desc: str):
     base_text = extract_docx_text(BASE_DOCX)
     updates = request_tailored_sections(base_text, job_title, job_desc)
@@ -182,27 +171,28 @@ def tailor_and_save(job_title: str, company_name: str, job_desc: str):
     fname = f"Anuraj_{company_clean}"
     out_docx = os.path.join(OUT_DIR_RESUMES, fname + ".docx")
     out_desc = os.path.join(OUT_DIR_DESC, f"{company_clean}_description.txt")
+
     os.makedirs(OUT_DIR_RESUMES, exist_ok=True)
     os.makedirs(OUT_DIR_DESC, exist_ok=True)
-    # write description
+
     with open(out_desc, "w", encoding="utf-8") as f:
         f.write(job_desc)
-    # apply updates to docx
+
     apply_updates_to_docx(out_docx, updates)
-    # convert docx -> pdf
+
     try:
         out_pdf = convert_docx_to_pdf(out_docx)
     except Exception as e:
+        print("⚠️ PDF conversion failed:", e)
         out_pdf = None
-        print("PDF conversion failed:", e)
+
     return out_docx, out_pdf
 
-# Simple test runner
+# Local test mode
 if __name__ == "__main__":
-    # Example usage (replace with dynamic inputs)
     job_title = "QA Automation Engineer"
     company_name = "TechNova Systems"
     job_desc = "Looking for a QA Automation Engineer with 3+ years experience in Selenium WebDriver and Java. CI/CD and API testing required."
-    print("Tailoring resume...")
-    d, p = tailor_and_save(job_title, company_name, job_desc)
-    print("Done:", d, p)
+    print("🚀 Tailoring resume...")
+    docx_path, pdf_path = tailor_and_save(job_title, company_name, job_desc)
+    print("✅ Done:", docx_path, pdf_path)
