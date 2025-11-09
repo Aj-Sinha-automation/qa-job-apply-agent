@@ -8,6 +8,9 @@ from scripts.convert_pdf_to_docx import convert as convert_pdf_to_docx
 from src.job_search import search_jobs
 from src.resume_tailor import tailor_and_save
 from src.telegram_bot import send_message
+from dotenv import load_dotenv
+load_dotenv()
+
 
 def main():
     try:
