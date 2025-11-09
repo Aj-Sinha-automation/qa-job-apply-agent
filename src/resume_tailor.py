@@ -72,7 +72,8 @@ def hf_tailor_request(base_text, job_title, job_desc):
     """Use Hugging Face Inference API as free fallback."""
     if not HF_KEY:
         raise RuntimeError("Hugging Face API key not set in .env")
-    url = "https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1"
+    # smaller free model for fallback
+    url = "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta"
     headers = {"Authorization": f"Bearer {HF_KEY}"}
     prompt = PROMPT_TEMPLATE.format(base_text=base_text, job_title=job_title, job_desc=job_desc)
     payload = {"inputs": prompt, "parameters": {"max_new_tokens": 512, "temperature": 0.4}}
