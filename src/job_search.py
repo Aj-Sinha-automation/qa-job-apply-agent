@@ -1,5 +1,8 @@
 # src/job_search.py
 import requests, os, json, urllib.parse
+from dotenv import load_dotenv
+load_dotenv()
+
 
 def search_jobs(query="QA Automation Engineer", location_keywords=None, max_results=10):
     """
