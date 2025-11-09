@@ -42,3 +42,12 @@ jobs:
       - name: Run bot (search & respond to commands)
         run: |
           python src/telegram_bot.py
+      - name: 📦 Upload tailored resumes and descriptions
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tailored-resumes
+          path: |
+            output/resumes/
+            output/descriptions/
+
