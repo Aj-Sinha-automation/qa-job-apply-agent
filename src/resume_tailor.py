@@ -73,7 +73,7 @@ def hf_tailor_request(base_text, job_title, job_desc):
     if not HF_KEY:
         raise RuntimeError("Hugging Face API key not set in .env")
 
-    url = "https://api-inference.huggingface.co/models/google/gemma-2b-it"
+    url = "https://router.huggingface.co/hf-inference/models/google/gemma-2b-it"
     headers = {"Authorization": f"Bearer {HF_KEY}"}
 
     prompt = PROMPT_TEMPLATE.format(base_text=base_text, job_title=job_title, job_desc=job_desc)
